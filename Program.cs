@@ -4,6 +4,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using static System.Net.WebRequestMethods;
 using Configuration = AngleSharp.Configuration;
 
 namespace LET.GIF.Scrape
@@ -61,7 +62,7 @@ namespace LET.GIF.Scrape
                 Console.WriteLine("total page: " + totalPageStr);
 
                 Console.Write("current page: page 1");
-                var parseResults = GetResults(doc, client);
+                var parseResults = GetResults(doc, client, gifOnly);
                 if (unique)
                 {
                     foreach (var parseResult in parseResults)
@@ -91,7 +92,7 @@ namespace LET.GIF.Scrape
 
                             doc = context.OpenAsync(req => req.Content(body)).Result;
 
-                            parseResults = GetResults(doc, client);
+                            parseResults = GetResults(doc, client, gifOnly);
                             if (unique)
                             {
                                 foreach (var parseResult in parseResults)
@@ -138,6 +139,7 @@ namespace LET.GIF.Scrape
                 var result = new Result();
 
                 result.Name = comment.QuerySelector(".Author")?.TextContent.Trim();
+                result.CommentUrl = "https://lowendtalk.com" + comment.QuerySelector(".CommentMeta .Permalink")?.GetAttribute("href")?.Trim();
 
                 comment.QuerySelector(".UserQuote")?.Remove();
 
@@ -147,10 +149,9 @@ namespace LET.GIF.Scrape
                 {
                     if (imgs.Count() > 0)
                     { 
-                        result.Url = imgs.First()?.GetAttribute("src")?.Trim();
+                        result.ImgUrl = imgs.First()?.GetAttribute("src")?.Trim();
 
                         results.Add(result);
-
                     }
                 }
                 else
@@ -174,7 +175,7 @@ namespace LET.GIF.Scrape
 
                                     if (image.Frames.Count > 1)
                                     {
-                                        result.Url = imgUrl;
+                                        result.ImgUrl = imgUrl;
 
                                         results.Add(result);
 
@@ -184,21 +185,36 @@ namespace LET.GIF.Scrape
 
                                 }
                             }
-                            else
+                            else if (imgUrl.Contains(".gif"))
                             {
-                                var imgResponse = client.GetAsync(imgUrl, HttpCompletionOption.ResponseHeadersRead).Result;
-                                if (imgResponse.IsSuccessStatusCode)
+                                result.ImgUrl = imgUrl;
+
+
+
+                                results.Add(result);
+
+                                break;
+
+                            } else
+                            {
+                                var ext = Path.GetExtension(imgUrl);
+
+                                if (ext == null)
                                 {
-                                    if (imgResponse.Content.Headers.ContentType != null)
+                                    var imgResponse = client.GetAsync(imgUrl, HttpCompletionOption.ResponseHeadersRead).Result;
+                                    if (imgResponse.IsSuccessStatusCode)
                                     {
-                                        var contentType = imgResponse.Content.Headers.ContentType.MediaType;
-                                        if (contentType == "image/gif")
+                                        if (imgResponse.Content.Headers.ContentType != null)
                                         {
-                                            result.Url = imgUrl;
+                                            var contentType = imgResponse.Content.Headers.ContentType.MediaType;
+                                            if (contentType == "image/gif")
+                                            {
+                                                result.ImgUrl = imgUrl;
 
-                                            results.Add(result);
+                                                results.Add(result);
 
-                                            break;
+                                                break;
+                                            }
                                         }
                                     }
                                 }
@@ -250,6 +266,8 @@ namespace LET.GIF.Scrape
     internal class Result
     {
         public string? Name { get; set; }
-        public string? Url { get; set; }
+        public string? ImgUrl { get; set; }
+
+        public string? CommentUrl { get; set; }
     }
 }
